@@ -1,7 +1,7 @@
 README
-Changes
+CHANGES
 MANIFEST
 Makefile.PL
-Purge.pm
+lib/Dir/Purge.pm
 t/basic.t
 

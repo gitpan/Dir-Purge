@@ -1,7 +1,14 @@
+#!/usr/bin/perl -w
+
 use ExtUtils::MakeMaker;
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
-WriteMakefile(
-    'NAME'	=> 'Dir::Purge',
-    'VERSION_FROM' => 'Purge.pm', # finds $VERSION
+use strict;
+
+WriteMakefile
+  (
+   NAME	   => 'Dir::Purge',
+   VERSION_FROM => 'lib/Dir/Purge.pm',
+   ($] >= 5.005) ?
+   ( AUTHOR    => "Johan Vromans <jvromans\@squirrel.nl>",
+     ABSTRACT  => "Selective purging of directories and files." ) : (),
+   PREREQ_PM => { 'Test::More' => 0 },
 );

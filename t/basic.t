@@ -3,7 +3,7 @@
 
 use File::Path;
 
-BEGIN { $| = 1; print "1..8\n"; }
+BEGIN { $| = 1; print "1..9\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Dir::Purge;
 $loaded = 1;
@@ -40,12 +40,19 @@ print "ok 3\n";
 print "not " unless join(" ",sort @files) eq "f1 f2 f3 f4 f5 f6";
 print "ok 4\n";
 
-# Test dirpurge. Nothing should be changed.
+# Test purgedir. Nothing should be changed.
+my $msgs;
 eval {
+    local $SIG{__WARN__} = sub { $msgs .= shift };
     purgedir ({verbose => 0, test => 1, keep => 4}, "t1");
 };
 print "$@\nnot " if $@;
 print "ok 5\n";
+print "$msgs\nnot " unless $msgs eq <<EOD;
+purgedir: candidate: t1/f6
+purgedir: candidate: t1/f1
+EOD
+print "ok 6\n";
 
 # Verify directory and files.
 opendir (D, "t1");
@@ -55,14 +62,14 @@ unless ( join(" ",sort @files) eq "f1 f2 f3 f4 f5 f6" ) {
     print "@files\n";
     print "not ";
 }
-print "ok 6\n";
+print "ok 7\n";
 
 # Now for the real work...
 eval {
     purgedir ({verbose => 0, keep => 4}, "t1");
 };
 print "$@\nnot " if $@;
-print "ok 7\n";
+print "ok 8\n";
 
 # Check that only the 4 most recent files are kept.
 opendir (D, "t1");
@@ -72,14 +79,11 @@ unless ( join(" ",sort @files) eq "f2 f3 f4 f5" ) {
     print "@files\n";
     print "not ";
 }
-print "ok 8\n";
+print "ok 9\n";
 
-# Remove the test deirectory again.
+# Remove the test directory again.
 rmtree (['t1']);
 
-######################### End of black magic.
-
-# Insert your test code below (better if it prints "ok 13"
-# (correspondingly "not ok 13") depending on the success of chunk 13
-# of the test code):
-
+# Local Variables:
+# mode: cperl
+# End:

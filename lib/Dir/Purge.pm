@@ -1,11 +1,15 @@
 # Dir::Purge.pm -- Purge directories
-# RCS Info        : $Id: Purge.pm,v 1.1 2000-05-21 15:35:37+02 jv Exp $
+# RCS Info        : $Id: Purge.pm,v 1.4 2005/02/21 21:41:11 jv Exp $
 # Author          : Johan Vromans
 # Created On      : Wed May 17 12:58:02 2000
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun May 21 15:35:19 2000
-# Update Count    : 89
+# Last Modified On: Mon Feb 21 22:36:28 2005
+# Update Count    : 159
 # Status          : Unknown, Use with caution!
+
+# Purge directories by strategy.
+#
+# This is also an exercise in weird programming techniques.
 
 package Dir::Purge;
 
@@ -13,15 +17,10 @@ use strict;
 use Carp;
 
 use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
-$VERSION    = "1.0";
+$VERSION    = "1.01";
 @ISA        = qw(Exporter);
 @EXPORT     = qw(&purgedir);
 @EXPORT_OK  = qw(&purgedir_by_age);
-
-my $verbose;			# verbosity. default = 1
-my $keep;			# number of files to keep, no default
-my $debug;			# debugging
-my $test;			# testing only
 
 my $purge_by_age;		# strategy
 
@@ -32,7 +31,7 @@ sub purgedir_by_age {
 	my $opts = shift (@dirs);
 	my $strat = delete $opts->{strategy};
 	if ( defined $strat && $strat ne "by_age" ) {
-	    croak ("Invalid option: \"strategy\"");
+	    croak ("Invalid option: 'strategy'");
 	}
 	$opts->{strategy} = "by_age";
     }
@@ -52,22 +51,19 @@ sub purgedir {
     my (@dirs) = @_;
     my $error = 0;
     my $code = $purge_by_age;	# default: by age
-    my $tag = "purgedir";
+    my $ctl = { tag => "purgedir" };
+    my @opts = qw(keep strategy reverse include verbose test debug);
 
     # Get the parameters. Only the 'keep' value is mandatory.
     if ( UNIVERSAL::isa ($dirs[0], 'HASH') ) {
 	my $opts  = shift (@dirs);
-	$keep	  = delete $opts->{keep};
-	$verbose  = delete $opts->{verbose};
-	$test	  = delete $opts->{test};
-	$debug	  = delete $opts->{debug};
-	my $strat = delete $opts->{strategy};
-	if ( defined $strat ) {
-	    if ( $strat eq "by_age" ) {
+	@{$ctl}{@opts} = delete @{$opts}{@opts};
+	if ( $ctl->{strategy} ) {
+	    if ( $ctl->{strategy} eq "by_age" ) {
 		$code = $purge_by_age;
 	    }
 	    else {
-		carp ("Unsupported purge strategy: \"$strat\"");
+		carp ("Unsupported purge strategy: '$ctl->{strategy}'");
 		$error++;
 	    }
 	}
@@ -77,19 +73,43 @@ sub purgedir {
 	}
     }
     elsif ( $dirs[0] =~ /^-?\d+$/ ) {
-	$keep = shift (@dirs);
+	$ctl->{keep} = shift (@dirs);
     }
 
-    unless ( defined $keep && $keep ) {
+    unless ( $ctl->{keep} ) {
 	croak ("Missing 'keep' value");
     }
+    elsif ( $ctl->{keep} < 0 ) {
+	# Hmm. I would like to deprecate this, but on the other hand,
+	# a negative 'subscript' fits well in Perl.
+	#carp ("Negative 'keep' value is deprecated, ".
+	#      "use 'reverse => 1' instead");
+	$ctl->{keep} = -$ctl->{keep};
+	$ctl->{reverse} = !$ctl->{reverse};
+    }
 
-    $verbose = 1 unless defined ($verbose);
-    $verbose++ if $debug;
+    $ctl->{verbose} = 1 unless defined ($ctl->{verbose});
+    $ctl->{verbose} = 9 if $ctl->{debug};
+
+    if ( $ctl->{include} ) {
+	if ( !ref($ctl->{include}) ) {
+	    croak("Invalid value for 'include': " . $ctl->{include});
+	}
+	elsif ( UNIVERSAL::isa($ctl->{include}, 'CODE') ) {
+	    # OK
+	}
+	elsif ( UNIVERSAL::isa($ctl->{include}, 'Regexp') ) {
+	    my $pat = $ctl->{include};
+	    $ctl->{include} = sub { $_[0] =~ $pat };
+	}
+	else {
+	    croak("Invalid value for 'include': " . $ctl->{include});
+	}
+    }
 
     # Thouroughly check the directories, and refuse to do anything
     # in case of problems.
-    warn ("$tag: checking directories\n") if $verbose;
+    warn ("$ctl->{tag}: checking directories\n") if $ctl->{verbose} > 1;
     foreach my $dir ( @dirs ) {
 	# Must be a directory.
 	unless ( -d $dir ) {
@@ -102,12 +122,12 @@ sub purgedir {
 	    carp ("$dir: no write access");
 	    $error++;
 	}
-	# We need read acces since we are going to ge tthe file list.
+	# We need read access since we are going to get the file list.
 	unless ( -r _ ) {
 	    carp ("$dir: no read access");
 	    $error++;
 	}
-	# Probably need this as weel, don't know.
+	# Probably need this as well, don't know.
 	unless ( -x _ ) {
 	    carp ("$dir: no access");
 	    $error++;
@@ -116,73 +136,106 @@ sub purgedir {
 
     # If errors, bail out unless testing.
     if ( $error ) {
-	if ( $test ) {
-	    carp ("$tag: errors detected, continuing");
+	if ( $ctl->{test} ) {
+	    carp ("$ctl->{tag}: errors detected, continuing");
 	}
 	else {
-	    croak ("$tag: errors detected, nothing done");
+	    croak ("$ctl->{tag}: errors detected, nothing done");
 	}
     }
 
     # Process the directories.
     foreach my $dir ( @dirs ) {
-	$code->($dir);
+	$code->($ctl, $dir);
     }
 };
 
-# Processing routine: purge by file age.
+# Everything else is assumed to be small building-block routines to
+# implement a plethora of purge strategies.
+# Actually, I cannot think of any right now.
 
-$purge_by_age = sub {
+# Gather file names and additional info.
+my $gather = sub {
+    my ($ctl, $dir, $what) = @_;
 
-    my $tag = "purgedir";
-    my $dir = shift;
-    warn ("$tag: purging directory $dir (by age, keep $keep)\n")
-      if $verbose;
-
-    # Gather file names and ages.
+    local (*DIR);
     opendir (DIR, $dir)
       or croak ("dir: $!");	# shouldn't happen -- we've checked!
     my @files;
     foreach ( readdir (DIR) ) {
+	next if $ctl->{include} && !$ctl->{include}->($_, $dir);
 	next if /^\./;
 	next unless -f "$dir/$_";
-	push (@files, [ "$dir/$_", -M _ ]);
+	push (@files, [ "$dir/$_", $what->("$dir/$_") ]);
     }
     closedir (DIR);
 
-    warn ("$tag: $dir: ", scalar(@files), " files\n") if $verbose;
-    warn ("$tag: $dir: @{[map { $_->[0] } @files]}\n") if $debug;
+    warn ("$ctl->{tag}: $dir: ", scalar(@files), " files\n")
+      if $ctl->{verbose} > 1;
+    warn ("$ctl->{tag}: $dir: @{[map { $_->[0] } @files]}\n")
+      if $ctl->{debug};
+
+    \@files;
+};
+
+# Sort the list on the supplied info.
+my $sort = sub {
+    my ($ctl, $files) = @_;
+
+    my @sorted = map { $_->[0] } sort { $a->[1] <=> $b->[1] } @$files;
+    warn ("$ctl->{tag}: sorted: @sorted\n") if $ctl->{debug};
+    \@sorted;
+};
+
+# Remove the files to keep from the list.
+my $reduce = sub {
+    my ($ctl, $files) = @_;
+
+    if ( $ctl->{reverse} ) {
+	# Keep the newest files (tail of the list).
+	splice (@$files, @$files-$ctl->{keep}, $ctl->{keep});
+    }
+    else {
+	# Keep the oldest files (head of the list).
+	splice (@$files, 0, $ctl->{keep});
+    }
+    $files;
+};
+
+# Remove the files in the list.
+my $purge = sub {
+    my ($ctl, $files) = @_;
+
+    # Remove the selected files.
+    foreach ( @$files ) {
+	if ( $ctl->{test} ) {
+	    warn ("$ctl->{tag}: candidate: $_\n");
+	}
+	else {
+	    warn ("$ctl->{tag}: removing $_\n") if $ctl->{verbose};
+	    unlink ($_) or carp ("$_: $!");
+	}
+    }
+};
+
+# Processing routine: purge by file age.
+$purge_by_age = sub {
+    my ($ctl, $dir) = @_;
+
+    warn ("$ctl->{tag}: purging directory $dir (by age, keep $ctl->{keep})\n")
+      if $ctl->{verbose} > 1;
+
+    # Gather, with age info.
+    my $files = $gather->($ctl, $dir, sub { -M _ });
 
     # Is there anything to do?
-    if ( @files <= abs($keep) ) {
-	warn ("$tag: $dir: below limit\n") if $verbose;
+    if ( @$files <= $ctl->{keep} ) {
+	warn ("$ctl->{tag}: $dir: below limit\n") if $ctl->{verbose} > 1;
 	return;
     }
 
-    # Sort on age. Also reduces the list to file names only.
-    my @sorted = map { $_->[0] } sort { $b->[1] <=> $a->[1] } @files;
-    warn ("$tag: $dir: sorted: @sorted\n") if $debug;
-
-    # Splice out the files to keep.
-    if ( $keep < 0 ) {
-	# Keep the oldest files (head of the list).
-	splice (@sorted, 0, -$keep);
-    }
-    else {
-	# Keep the newest files (tail of the list).
-	splice (@sorted, @sorted-$keep, $keep);
-    }
-
-    # Remove the rest.
-    foreach ( @sorted ) {
-	if ( $test ) {
-	    warn ("$tag: candidate: $_\n");
-	}
-	else {
-	    warn ("$tag: removing $_\n") if $verbose;
-	    unlink ($_) or carp ("$dir: $!");
-	}
-    }
+    # Sort, reduce and purge.
+    $purge->($ctl, $reduce->($ctl, $sort->($ctl, $files)));
 };
 
 1;
@@ -218,7 +271,7 @@ number of files to keep is mandatory.
 
 The other arguments are the names of the directories that must be
 purged. Note that this process is not recursive. Also, hidden files
-(file name starts with a C<.>) and non-plain files (e.g., directories,
+(name starts with a C<.>) and non-plain files (e.g., directories,
 symbolic links) are not taken into account.
 
 All directory arguments and options are checked before anything else
@@ -253,9 +306,7 @@ All subroutines take the same arguments.
 =item keep
 
 The number of files to keep.
-
-If positive, the newest files will be kept. If negative, the absolute
-value will be used and the oldest files will be kept.
+A negative number will reverse the strategy. See option C<reverse> below.
 
 =item strategy
 
@@ -265,10 +316,34 @@ Default (and only allowed) value is "by_age".
 This option is for C<purgedir> only. The other subroutines should not
 be provided with a C<strategy> option.
 
+=item include
+
+If this is a reference to a subroutine, this subroutine is called with
+arguments ($file,$dir) and must return true for the file to be
+included in the list of candidates,
+
+If this is a regular expression, the file file will be included only
+if the expression matches the file name.
+
+=item reverse
+
+If true, the strategy will be reversed. For example, if the strategy
+is "by_age", the oldest files will be kept instead of the newest
+files.
+
+Another way to reverse the strategy is using a negative C<keep> value.
+This is not unlike Perl's array subscripts, which count from the end if
+negative.
+
+A negative C<keep> value can be combined with C<reverse> to reverse
+the reversed strategy again.
+
 =item verbose
 
-Verbosity of messages. Default value is 1. A value of 0 (zero) will
-suppress messages.
+Verbosity of messages. Default value is 1, which will report the names
+of the files being removed. A value greater than 1 will produce more
+messages about what's going on. A value of 0 (zero) will suppress
+messages.
 
 =item debug
 

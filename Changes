@@ -1,0 +1,8 @@
+Revision history for Perl extension Dir::Purge.
+
+1.00  Sun May 21 15:36:15 2000
+	- first CPAN release
+
+0.01  Fri May 19 18:20:19 2000
+	- original version; created by h2xs 1.19
+

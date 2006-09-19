@@ -5,3 +5,4 @@ Makefile.PL
 lib/Dir/Purge.pm
 t/basic.t
 
+META.yml                                 Module meta-data (added by MakeMaker)

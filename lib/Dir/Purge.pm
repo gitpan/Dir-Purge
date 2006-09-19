@@ -1,10 +1,10 @@
 # Dir::Purge.pm -- Purge directories
-# RCS Info        : $Id: Purge.pm,v 1.4 2005/02/21 21:41:11 jv Exp $
+# RCS Info        : $Id: Purge.pm,v 1.6 2006/09/19 12:24:01 jv Exp $
 # Author          : Johan Vromans
 # Created On      : Wed May 17 12:58:02 2000
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon Feb 21 22:36:28 2005
-# Update Count    : 159
+# Last Modified On: Tue Sep 19 14:23:56 2006
+# Update Count    : 161
 # Status          : Unknown, Use with caution!
 
 # Purge directories by strategy.
@@ -17,7 +17,7 @@ use strict;
 use Carp;
 
 use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
-$VERSION    = "1.01";
+$VERSION    = "1.02";
 @ISA        = qw(Exporter);
 @EXPORT     = qw(&purgedir);
 @EXPORT_OK  = qw(&purgedir_by_age);
@@ -28,7 +28,7 @@ sub purgedir_by_age {
     my @dirs = @_;
     my $opts;
     if ( UNIVERSAL::isa ($dirs[0], 'HASH') ) {
-	my $opts = shift (@dirs);
+	$opts = shift (@dirs);
 	my $strat = delete $opts->{strategy};
 	if ( defined $strat && $strat ne "by_age" ) {
 	    croak ("Invalid option: 'strategy'");
